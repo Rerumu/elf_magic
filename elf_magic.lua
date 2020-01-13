@@ -372,11 +372,12 @@ local StringSection = LuaClass('StringSection', DEFAULT_SECTION_HEADER, function
 	self.ss_size = 1
 end)
 
-local CodeSection = LuaClass('CodeSection', DEFAULT_SECTION_HEADER, function(self)
+local DataSection = LuaClass('DataSection', DEFAULT_SECTION_HEADER, function(self)
 	self.sh_type = Enum.SectionType.PROGBITS
-	self.sh_flags = bit.bor(Enum.SectionFlags.ALLOC, Enum.SectionFlags.EXECINSTR)
-	self.sh_addralign = 0x10
-	self.cs_instructions = {}
+	self.sh_flags = Enum.SectionFlags.ALLOC
+	self.sh_addralign = 0x8 -- regardless of platform
+	self.ds_data = {}
+	self.ds_size = 0
 end)
 
 NullSection.update = void_func
@@ -413,14 +414,7 @@ function StringSection:set_as_name_list()
 	self.sh_name = self:ref '.shstrtab'
 end
 
-function StringSection:update()
-	local str_list = self.ss_strings
-	local size = #str_list
-
-	for i = 2, size do size = size + #str_list[i] end
-
-	self.sh_size = size
-end
+function StringSection:update() self.sh_size = self.ss_size end
 
 function StringSection:data_to_str(W)
 	for _, v in ipairs(self.ss_strings) do
@@ -429,21 +423,93 @@ function StringSection:data_to_str(W)
 	end
 end
 
-function CodeSection:push(inst) table.insert(self.cs_instructions, inst) end
-
-function CodeSection:update()
-	local size = 0
-
-	for _, v in ipairs(self.cs_instructions) do size = size + #v end
-
-	self.sh_size = size
+function DataSection:set_as_code()
+	self.sh_flags = bit.bor(Enum.SectionFlags.ALLOC, Enum.SectionFlags.EXECINSTR)
+	self.sh_addralign = 0x10
 end
 
-function CodeSection:data_to_str(W) for _, v in ipairs(self.cs_instructions) do W:str2b(v) end end
+function DataSection:lookup(exp_tt, exp_dt, exp_ext)
+	local data_list = self.ds_data
+	local index = 0
+	local ok = false
+
+	for i = 1, #data_list do
+		local data = data_list[i]
+		local tt, dt, ext = data[1], data[2], data[3]
+
+		if tt == exp_tt and dt == exp_dt and ext == exp_ext then
+			ok = true
+			break
+		end
+
+		if tt == 0 then -- wysiwyg
+			index = index + #dt
+		elseif tt == 1 then -- int
+			index = index + ext
+		elseif tt == 2 then -- string
+			index = index + #dt + 1
+		end
+	end
+
+	return ok and index
+end
+
+function DataSection:push_data(dt)
+	local ds_d = self.ds_data
+	local ds_i = self.ds_size
+	self.ds_size = ds_i + #dt
+	ds_d[#ds_d + 1] = {0, dt}
+
+	return ds_i
+end
+
+function DataSection:push_int(int, len)
+	local ds_d = self.ds_data
+	local ds_i = self.ds_size
+	self.ds_size = ds_i + len
+	ds_d[#ds_d + 1] = {1, int, len}
+
+	return ds_i
+end
+
+function DataSection:push_string(str)
+	local ds_d = self.ds_data
+	local ds_i = self.ds_size
+	self.ds_size = ds_i + #str + 1
+	ds_d[#ds_d + 1] = {2, str}
+
+	return ds_i
+end
+
+function DataSection:ref_data(dt) return self:lookup(0, dt, nil) or self:push_data(dt) end
+
+function DataSection:ref_int(int, len) return self:lookup(1, int, len) or self:push_int(int, len) end
+
+function DataSection:ref_string(str) return self:lookup(2, str, nil) or self:push_string(str) end
+
+function DataSection:update() self.sh_size = self.ds_size end
+
+function DataSection:data_to_str(W)
+	local data_list = self.ds_data
+
+	for i = 1, #data_list do
+		local data = data_list[i]
+		local tt = data[1]
+
+		if tt == 0 then -- wysiwyg
+			W:str2b(data[2])
+		elseif tt == 1 then -- int
+			W:write_int(data[2], data[3])
+		elseif tt == 2 then -- string
+			W:str2b(data[2])
+			W:b2b(0)
+		end
+	end
+end
 
 return {
 	Enum = Enum,
 	File = File,
 	Segment = {HDR = HDRSegment, Memory = MemorySegment},
-	Section = {Null = NullSection, String = StringSection, Code = CodeSection},
+	Section = {Null = NullSection, String = StringSection, Data = DataSection},
 }
