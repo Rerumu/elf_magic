@@ -1,7 +1,7 @@
 local pairs = pairs
 local setmetatable = setmetatable
 
-local bit = bit or bit32 or load [[
+local bit = bit or load [[
 	return {
 		band = function(a, b) return a & b end,
 		bor = function(a, b) return a | b end,
