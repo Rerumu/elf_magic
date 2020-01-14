@@ -3,7 +3,7 @@ local elf = require('elf_magic')
 local elf_inst = elf.File.new()
 local mem_seg = elf.Segment.Memory.new()
 local null_sect = elf.Section.Null.new()
-local code_sect = elf.Section.Code.new()
+local code_sect = elf.Section.Data.new()
 local str_sect = elf.Section.String.new()
 
 elf_inst:set_file_class(elf.Enum.Class.B64) -- x64 file
@@ -14,7 +14,8 @@ mem_seg:push_section(code_sect)
 mem_seg:push_section(str_sect)
 
 str_sect:set_as_name_list() -- initialize name section (as opposed to normal strtab)
-code_sect:push('\x55\x48\x89\xE5\xEB\x01\xCC\x5D\xC3')
+code_sect:set_as_code()
+code_sect:push_data('\x55\x48\x89\xE5\xEB\x01\xCC\x5D\xC3')
 -- https://defuse.ca/online-x86-assembler.htm
 --[[
 push rbp
