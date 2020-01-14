@@ -1,7 +1,7 @@
 local pairs = pairs
 local setmetatable = setmetatable
 
-local bit = bit or load [[
+local bit = require('bit') or load [[
 	return {
 		band = function(a, b) return a & b end,
 		bor = function(a, b) return a | b end,
